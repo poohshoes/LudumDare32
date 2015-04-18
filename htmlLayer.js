@@ -38,6 +38,24 @@ function doMouseDown(event)
     //canvas_x = event.pageX;
 }
 
+var mousePosition = new v2(0, 0);
+canvas.addEventListener("mousemove", doMouseMoved);
+function doMouseMoved(event)
+{
+    mousePosition.x = event.clientX - (canvas.offsetLeft - window.pageXOffset);
+    mousePosition.y = event.clientY - (canvas.offsetTop - window.pageYOffset);
+    mousePosition = v2Divide(mousePosition, camera.scale)
+}
+
+function getMousePosition(evt)
+{
+    var rect = canvas.getBoundingClientRect();
+    return {
+      x: evt.clientX - rect.left,
+      y: evt.clientY - rect.top
+    };
+}
+
 var keysDown = {};
 canvas.addEventListener("keydown", doKeyDown, true);
 function doKeyDown(e)
@@ -93,6 +111,13 @@ function tableColumn(table, type, width)
     table.columnData[table.lastColumn] = new columnData(type, width);
 }
 
+var currentTooltip = null;
+function tooltip(text, position)
+{
+    this.text = text;
+    this.position = position;
+}
+
 function tableRowItem(mode, table, value)
 {
     if(mode == "update")
@@ -113,7 +138,14 @@ function tableRowItem(mode, table, value)
                 break;
             case "job":
                 var image = imageSet["job"][value];
-                drawTexture(table.panel.current, image);
+                var topLeft = new v2(table.panel.current.x, table.panel.current.y);
+                var bottomRight = new v2(topLeft.x + image.width, topLeft.y + image.height);
+                if(isBetween(topLeft, mousePosition, bottomRight))
+                {
+                    var tooltipText = image.tooltip;
+                    currentTooltip = new tooltip(tooltipText, new v2(mousePosition.x, mousePosition.y));
+                }
+                drawTexture(topLeft, image);
                 if(image.height > table.maxHeightForThisRow)
                 {
                     table.maxHeightForThisRow = image.height;
@@ -142,8 +174,9 @@ function updateAndDraw(mode, secondsElapsed)
     if(mode == "draw")
     {
         // Fill to black.
-        canvasContext.fillStyle = "#000000";
+        canvasContext.fillStyle = "#c0c0c0";
         canvasContext.fillRect(0, 0, canvas.width, canvas.height);
+        currentTooltip = null;
     }
     
     // todo: Put in a strict width not to surpass (scrolling).
@@ -175,6 +208,12 @@ function updateAndDraw(mode, secondsElapsed)
             }
             endTable(panel, intelTable);
         break;
+    }
+    
+    if(mode == "draw" && currentTooltip != null)
+    {
+        // Todo: this needs a background.
+        drawText(v2Add(currentTooltip.position, new v2(7, 0)), currentTooltip.text);
     }
     
     if(keysDown[ascii("D")])
@@ -239,7 +278,7 @@ function drawCircle(center)
 function drawText(start, text)
 {
     canvasContext.font = fontHeight + "px Arial";
-    canvasContext.fillStyle = "#FFFFFF";
+    canvasContext.fillStyle = "#000000";
     //var textSize = canvasContext.measureText(text);
     var position = new v2(start.x, start.y);
     position.y += fontHeight;
@@ -304,10 +343,13 @@ var imageSet = [];
 imageSet["job"] = [];
 imageSet["job"]["president"] = new Image();
 imageSet["job"]["president"].src = "data/jobPresident.png";
+imageSet["job"]["president"].tooltip = "President";
 imageSet["job"]["journalist"] = new Image();
 imageSet["job"]["journalist"].src = "data/jobJournalist.png";
+imageSet["job"]["journalist"].tooltip = "Journalist";
 imageSet["job"]["macroCorp"] = new Image();
 imageSet["job"]["macroCorp"].src = "data/jobMacroCorp.png";
+imageSet["job"]["macroCorp"].tooltip = "MacroCorp";
 
 var intelList = [];
 intelList[intelList.length] = new intel("Bob Nator", "president", 0, 0, 0.5, 0, 0);
@@ -350,6 +392,7 @@ main();
 //
 //====== MATH ======
 //
+
 function v2(x, y)
 {
     if(isNaN(x))
@@ -438,4 +481,12 @@ function v2NormalizeAssign(a)
     {
         v2DivideAssign(a, v2Length(a));
     }
+}
+
+function isBetween(topLeft, check, bottomRight)
+{
+    return topLeft.x < check.x &&
+        topLeft.y < check.y &&
+        check.x < bottomRight.x &&
+        check.y < bottomRight.y;
 }
