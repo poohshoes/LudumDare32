@@ -60,32 +60,81 @@ function ascii(character)
 //====== UPDATE ======
 //
 
-function viewPanel(position, mode)
+var fontHeight = 10;
+
+function viewPanel(position)
 {
-    this.start = position;
-    this.current = position;
-    this.mode = mode;
-    this.table = null;
+    this.start = new v2(position.x, position.y);
+    this.current = new v2(position.x, position.y);
 }
 
-function tableColumn(mode, panel, name, width)
+function table(position)
+{
+    this.panel = new viewPanel(position);
+    this.lastColumn = -1;
+    this.columnData = [];
+    this.maxHeightForThisRow = 0;
+}
+
+function columnData(type, width)
+{
+    this.type = type;
+    this.width = width;
+}
+
+function tableStartRows(table)
+{
+    table.lastColumn = -1;
+}
+
+function tableColumn(table, type, width)
+{
+    table.lastColumn++;
+    table.columnData[table.lastColumn] = new columnData(type, width);
+}
+
+function tableRowItem(mode, table, value)
 {
     if(mode == "update")
     {
     }
     else
     {
+        table.lastColumn++;
+        var columnData = table.columnData[table.lastColumn];
+        switch(columnData.type)
+        {
+            case "text":
+                drawText(table.panel.current, value);
+                if(fontHeight > table.maxHeightForThisRow)
+                {
+                    table.maxHeightForThisRow = fontHeight;
+                }
+                break;
+            case "job":
+                var image = imageSet["job"][value];
+                drawTexture(table.panel.current, image);
+                if(image.height > table.maxHeightForThisRow)
+                {
+                    table.maxHeightForThisRow = image.height;
+                }
+                break;
+        }
+        table.panel.current.x += columnData.width;
     }
 }
 
-function tableRowItem(mode, panel, value)
+function tableEndRow(table)
 {
-    if(mode == "update")
-    {
-    }
-    else
-    {
-    }
+    table.panel.current.x = table.panel.start.x;
+    table.panel.current.y += table.maxHeightForThisRow;
+    table.maxHeightForThisRow = 0;
+    table.lastColumn = -1;
+}
+
+function endTable(panel, table)
+{
+    panel.y += table.panel.y;
 }
 
 function updateAndDraw(mode, secondsElapsed) 
@@ -96,30 +145,35 @@ function updateAndDraw(mode, secondsElapsed)
         canvasContext.fillStyle = "#000000";
         canvasContext.fillRect(0, 0, canvas.width, canvas.height);
     }
-        
+    
+    // todo: Put in a strict width not to surpass (scrolling).
     var panel = new viewPanel(new v2(0, 0), mode);
     
     switch(tab)
     {
         case "intel":
-            tableColumn(mode, panel, "Name", 100);
-            tableColumn(mode, panel, "job", 40);
-            tableColumn(mode, panel, "legalScoop", 50);
-            tableColumn(mode, panel, "illegalScoop", 50);
-            tableColumn(mode, panel, "loyalty", 50);
-            tableColumn(mode, panel, "fear", 50);
-            tableColumn(mode, panel, "suspicion", 50);
+            var intelTable = new table(panel.current);
+            tableColumn(intelTable, "text", 100);
+            tableColumn(intelTable, "job", 40);
+            tableColumn(intelTable, "text", 50);
+            tableColumn(intelTable, "text", 50);
+            tableColumn(intelTable, "text", 50);
+            tableColumn(intelTable, "text", 50);
+            tableColumn(intelTable, "text", 50);
+            tableStartRows(intelTable);
             for(var i = 0; i < intelList.length; i++)
             {
                 var intel = intelList[i];
-                tableRowItem(mode, panel, intel.name);
-                tableRowItem(mode, panel, intel.job);
-                tableRowItem(mode, panel, intel.legalScoop);
-                tableRowItem(mode, panel, intel.illegalScoop);
-                tableRowItem(mode, panel, intel.loyalty);
-                tableRowItem(mode, panel, intel.fear);
-                tableRowItem(mode, panel, intel.suspicion);
+                tableRowItem(mode, intelTable, intel.name);
+                tableRowItem(mode, intelTable, intel.job);
+                tableRowItem(mode, intelTable, intel.legalScoop);
+                tableRowItem(mode, intelTable, intel.illegalScoop);
+                tableRowItem(mode, intelTable, Math.round(intel.loyalty * 100));
+                tableRowItem(mode, intelTable, Math.round(intel.fear * 100));
+                tableRowItem(mode, intelTable, Math.round(intel.suspicion * 100));
+                tableEndRow(intelTable);
             }
+            endTable(panel, intelTable);
         break;
     }
     
@@ -184,7 +238,6 @@ function drawCircle(center)
 
 function drawText(start, text)
 {
-    var fontHeight = 12;
     canvasContext.font = fontHeight + "px Arial";
     canvasContext.fillStyle = "#FFFFFF";
     //var textSize = canvasContext.measureText(text);
@@ -199,7 +252,7 @@ function drawText(start, text)
     canvasContext.restore();
 }
 
-function drawTexture(image, position)
+function drawTexture(position, image)
 {  
     var width = image.width;
     var height = image.height;
@@ -214,20 +267,7 @@ function drawTexture(image, position)
     x = Math.round(x);
     y = Math.round(y);
     
-    // if(sprite.flipH)
-    // {
-        // canvasContext.save();
-        // canvasContext.translate(canvas.width, 0);
-        // canvasContext.scale(-1, 1);
-        // x = canvas.width - x - (sprite.frameWidth * camera.scale);
-    // }
-    
     canvasContext.drawImage(image, 0, 0, width, height, x, y, width * camera.scale, height * camera.scale);
-    
-    // if(sprite.flipH)
-    // {
-        // canvasContext.restore();
-    // }
 }
 
 //
@@ -259,6 +299,16 @@ function intel(name, job, legalScoop, illegalScoop, loyalty, fear, suspicion)
     this.fear = fear;
     this.suspicion = suspicion;
 }
+
+var imageSet = [];
+imageSet["job"] = [];
+imageSet["job"]["president"] = new Image();
+imageSet["job"]["president"].src = "data/jobPresident.png";
+imageSet["job"]["journalist"] = new Image();
+imageSet["job"]["journalist"].src = "data/jobJournalist.png";
+imageSet["job"]["macroCorp"] = new Image();
+imageSet["job"]["macroCorp"].src = "data/jobMacroCorp.png";
+
 var intelList = [];
 intelList[intelList.length] = new intel("Bob Nator", "president", 0, 0, 0.5, 0, 0);
 intelList[intelList.length] = new intel("John Johnson", "journalist", 0, 0, 0.1, 0, 0.1);
@@ -283,7 +333,7 @@ function main()
     updateAndDraw("update", secondsSinceUpdate);
     updateAndDraw("draw", secondsSinceUpdate);
     
-    drawText(new v2(5, 5), secondsSinceUpdate);
+    drawText(new v2(5, 280), secondsSinceUpdate);
     
 	lastUpdateTime = now;
 	requestAnimationFrame(main);
