@@ -38,6 +38,13 @@ function doMouseDown(event)
     //canvas_x = event.pageX;
 }
 
+var mouseToggledUp = false;
+canvas.addEventListener("mouseup", doMouseUp, true);
+function doMouseUp(event)
+{
+    mouseToggledUp = true;
+}
+
 var mousePosition = new v2(0, 0);
 canvas.addEventListener("mousemove", doMouseMoved);
 function doMouseMoved(event)
@@ -78,12 +85,20 @@ function ascii(character)
 //====== UPDATE ======
 //
 
+var borderSize = 2;
 var fontHeight = 10;
 
 function viewPanel(position)
 {
     this.start = new v2(position.x, position.y);
     this.current = new v2(position.x, position.y);
+}
+
+var currentTooltip = null;
+function tooltip(text, position)
+{
+    this.text = text;
+    this.position = position;
 }
 
 function table(position)
@@ -111,33 +126,54 @@ function tableColumn(table, type, width)
     table.columnData[table.lastColumn] = new columnData(type, width);
 }
 
-var currentTooltip = null;
-function tooltip(text, position)
-{
-    this.text = text;
-    this.position = position;
-}
-
 function tableRowItem(mode, table, value)
 {
-    if(mode == "update")
+    var result = false;
+    table.lastColumn++;
+    var columnData = table.columnData[table.lastColumn];
+    
+    switch(columnData.type)
     {
-    }
-    else
-    {
-        table.lastColumn++;
-        var columnData = table.columnData[table.lastColumn];
-        switch(columnData.type)
-        {
-            case "text":
+        case "text":
+            if(mode == "draw")
+            {
                 drawText(table.panel.current, value);
                 if(fontHeight > table.maxHeightForThisRow)
                 {
                     table.maxHeightForThisRow = fontHeight;
                 }
-                break;
-            case "job":
-                var image = imageSet["job"][value];
+            }
+            break;
+        case "tab":
+            if(mode == "draw")
+            {
+                var text = value.charAt(0).toUpperCase() + value.slice(1);
+                drawRectangle(v2Add(table.panel.current, new v2(columnData.width - borderSize, 0)), new v2(borderSize, fontHeight + (2* borderSize)), "#808080"); // right
+                if(currentTab != value)
+                {
+                    drawRectangle(v2Add(table.panel.current, new v2(0, fontHeight + borderSize)), new v2(columnData.width, borderSize), "#808080"); // bottom
+                }
+                drawRectangle(table.panel.current, new v2(columnData.width, borderSize), "#dfdfdf"); // top
+                drawRectangle(table.panel.current, new v2(borderSize, fontHeight + (2* borderSize)), "#dfdfdf"); // left
+                drawText(v2Add(table.panel.current, new v2((2*borderSize), borderSize)), text);
+            }
+            else // draw
+            {
+                var topLeft = table.panel.current;
+                var bottomRight = v2Add(table.panel.current, new v2(columnData.width, fontHeight + (2 * borderSize)));
+                result = mouseToggledUp && isBetween(topLeft, mousePosition, bottomRight);
+            }
+            
+            var totalHeight = fontHeight + (2 * borderSize);
+            if(totalHeight > table.maxHeightForThisRow)
+            {
+                table.maxHeightForThisRow = totalHeight;
+            }
+            break;
+        case "job":
+            var image = imageSet["job"][value];
+            if(mode == "draw")
+            {
                 var topLeft = new v2(table.panel.current.x, table.panel.current.y);
                 var bottomRight = new v2(topLeft.x + image.width, topLeft.y + image.height);
                 if(isBetween(topLeft, mousePosition, bottomRight))
@@ -146,14 +182,17 @@ function tableRowItem(mode, table, value)
                     currentTooltip = new tooltip(tooltipText, new v2(mousePosition.x, mousePosition.y));
                 }
                 drawTexture(topLeft, image);
-                if(image.height > table.maxHeightForThisRow)
-                {
-                    table.maxHeightForThisRow = image.height;
-                }
-                break;
-        }
-        table.panel.current.x += columnData.width;
+            }
+            
+            if(image.height > table.maxHeightForThisRow)
+            {
+                table.maxHeightForThisRow = image.height;
+            }
+            break;
     }
+    table.panel.current.x += columnData.width;
+    
+    return result;
 }
 
 function tableEndRow(table)
@@ -166,7 +205,7 @@ function tableEndRow(table)
 
 function endTable(panel, table)
 {
-    panel.y += table.panel.y;
+    panel.current.y = table.panel.current.y + borderSize;
 }
 
 function updateAndDraw(mode, secondsElapsed) 
@@ -182,7 +221,22 @@ function updateAndDraw(mode, secondsElapsed)
     // todo: Put in a strict width not to surpass (scrolling).
     var panel = new viewPanel(new v2(0, 0), mode);
     
-    switch(tab)
+    var tabTable = new table(panel.current);
+    tableColumn(tabTable, "tab", 100);
+    tableColumn(tabTable, "tab", 100);
+    tableStartRows(tabTable);
+    if(tableRowItem(mode, tabTable, "intel"))
+    {
+        currentTab = "intel";
+    }
+    if(tableRowItem(mode, tabTable, "actions"))
+    {
+        currentTab = "actions";
+    }
+    tableEndRow(tabTable);
+    endTable(panel, tabTable);
+    
+    switch(currentTab)
     {
         case "intel":
             var intelTable = new table(panel.current);
@@ -219,6 +273,8 @@ function updateAndDraw(mode, secondsElapsed)
     if(keysDown[ascii("D")])
     {
     }
+    
+    mouseToggledUp = false;
 }
 
 function approach(start, destination, rate)
@@ -258,10 +314,10 @@ function approach(start, destination, rate)
     // // drawTexture(images[buttonTextureName], new v2(10, 10));
 // }
 
-function drawRectangle(start, size)
+function drawRectangle(start, size, color)
 {
     var position = v2Subtract(v2Multiply(start, camera.scale), camera.offset);
-    canvasContext.fillStyle = 'magenta';
+    canvasContext.fillStyle = color;
     canvasContext.fillRect(position.x, position.y, size.x * camera.scale, size.y * camera.scale);
 }
 
@@ -363,7 +419,7 @@ intelList[intelList.length] = new intel("Natalie Hammer", "macroCorp", 0, 0, 0.2
 //====== GAME LOOP ======
 //
 
-var tab = "intel";
+var currentTab = "intel";
 var lastUpdateTime;
 function main()
 {
