@@ -464,16 +464,23 @@ function updateAndDraw(mode, secondsElapsed)
                 }
             }
         break;
+        case "actions":
+            for(var i = actions.length - 1; i >= 0; i--)
+            {
+                var action = actions[i];
+                // todo: handle text overflow
+                drawText(v2Add(panel.current, new v2(border, 0)), (action.activationTurn - turn) + " Turns: " + action.text);
+                panel.current.y += fontHeight;
+                
+                // draw options here
+            }
+        break;
     }
     
     // todo: Put a tool tip on this
     var endTurnButtonPosition = new v2(baseWidth - 30, baseHeight - 30);
     if(doImageButton(mode, endTurnButtonPosition, images[endTurnTextureName]))
     {
-        // var programCost = getProgramsTotalCost();
-        // money += income - programCost;
-        // var projection = money + income - programCost;
-        // if(projection
         money += income;
         for(var i = 0; i < programs.length; i++)
         {
@@ -493,6 +500,26 @@ function updateAndDraw(mode, secondsElapsed)
             }
             
             program.activeLastTurn = program.active;
+        }
+        
+        turn++;
+        
+        for(var i = actions.length - 1; i >= 0 ; i--)
+        {
+            var action = actions[i];
+            if(action.activationTurn == turn)
+            {
+                actions.splice(i, 1);
+                if(action.type == "budget")
+                {
+                    income -= 10;
+                }
+            }
+        }
+        
+        if(turn == 2)
+        {
+            addSenateBudgetAction();
         }
     }
     
@@ -653,6 +680,9 @@ imageSet["job"]["journalist"].tooltip = "Journalist";
 imageSet["job"]["macroCorp"] = new Image();
 imageSet["job"]["macroCorp"].src = "data/jobMacroCorp.png";
 imageSet["job"]["macroCorp"].tooltip = "MacroCorp";
+imageSet["job"]["senator"] = new Image();
+imageSet["job"]["senator"].src = "data/jobSenate.png";
+imageSet["job"]["senator"].tooltip = "Senator";
 
 function intel(name, job, legalScoop, illegalScoop, loyalty, fear, suspicion)
 {
@@ -665,10 +695,25 @@ function intel(name, job, legalScoop, illegalScoop, loyalty, fear, suspicion)
     this.suspicion = suspicion;
 }
 
+var firstNames = ["Ali", "Barbra", "Clatyon", "Darcy", "Emmit", "Frankie", "Gerald", "Hayden", "Igor", "Jamie", "Karl", "Lynn", "Morgan", "Natale", "Orin", "Petunia", "Quin", "Rudy", "Sam", "Taylor", "Ugine", "Vincent", "West", "Xavier", "Yogi", "Zander"];
+
+var lastNames = ["Anderson", "Brown", "Clark", "Davis", "Evans", "Fernandez", "Garcia", "Hall", "Ingram", "Johnson", "King", "Lee", "Miller", "Nask", "Orr", "Phillips", "Quadir", "Rodriguez", "Smith", "Taylor", "Urwin", "Vincent", "Williams", "Xiong", "Young", "Zackary"];
+
+function getRandomName()
+{
+    var firstIndex = Math.floor(Math.random()*firstNames.length);
+    var lastIndex = Math.floor(Math.random()*lastNames.length);
+    return firstNames[firstIndex] + " " + lastNames[lastIndex];
+}
+
 var intelList = [];
-intelList[intelList.length] = new intel("Bob Nator", "president", 0, 0, 0.5, 0, 0);
-intelList[intelList.length] = new intel("John Johnson", "journalist", 0, 0, 0.1, 0, 0.1);
-intelList[intelList.length] = new intel("Natalie Hammer", "macroCorp", 0, 0, 0.2, 0, 0.1);
+intelList[intelList.length] = new intel(getRandomName(), "president", 0, 0, 0.5, 0, 0);
+intelList[intelList.length] = new intel(getRandomName(), "senator", 0, 0, 0.2, 0, 0.1);
+intelList[intelList.length] = new intel(getRandomName(), "senator", 0, 0, 0.2, 0, 0.1);
+intelList[intelList.length] = new intel(getRandomName(), "journalist", 0, 0, 0.1, 0, 0.1);
+intelList[intelList.length] = new intel(getRandomName(), "journalist", 0, 0, 0.1, 0, 0.1);
+intelList[intelList.length] = new intel(getRandomName(), "journalist", 0, 0, 0.1, 0, 0.1);
+intelList[intelList.length] = new intel(getRandomName(), "macroCorp", 0, 0, 0.2, 0, 0.1);
 
 function program(name, cost)
 {
@@ -679,9 +724,9 @@ function program(name, cost)
 }
 
 var programs = [];
-programs[programs.length] = new program("Tap Land Lines", 100);
+programs[programs.length] = new program("Tap Land Lines", 50);
 programs[programs.length] = new program("Email Capture", 100);
-programs[programs.length] = new program("Snoop Cell Phones", 100);
+programs[programs.length] = new program("Snoop Cell Phones", 200);
 
 var breifings = [];
 function addBreifing(text)
@@ -689,10 +734,10 @@ function addBreifing(text)
     breifings[breifings.length] = text;
     tabNotification["messages"] = true;
 }
-addBreifing("Congratulations on your premotion to director of the NSA.  We have suspicions of a plot to blow up the White House, but we don't have any more leads, if only we could tap the land lines we might be able to figure out more.\n\nGood Luck,\nBob Robertson\nDirector of CIA");
+addBreifing("Congratulations on your premotion to director of the NSA.  We have suspicions of a plot to blow up the White House, but we don't have any more leads, if only we could tap the land lines we might be able to figure out more.\n\nGood Luck,\nJohn Brennan\nDirector of CIA");
 
-var income = 100;
-var money = 100;
+var income = 50;
+var money = 0;
 
 // todo: cancel programs we can't afford
 function getProgramsTotalCost()
@@ -708,8 +753,41 @@ function getProgramsTotalCost()
     return cost;
 }
 
+var turn = 1;
+
 // var testSound = new Audio("data/audio/sound1.wav");
 // testSound.play();
+
+//
+//====== ACTIONS ======
+//
+
+function budgetAction(person, text)
+{
+    this.type = "budget"
+    this.text = text;
+    this.person = person;
+    this.activationTurn = turn + 2;
+    this.getScoop = false;
+}
+
+function addSenateBudgetAction()
+{
+    var senators = [];
+    for(var i = 0; i < intelList.length; i++)
+    {
+        if(intelList[i].job == "senator")
+        {
+            senators[senators.length] = intelList[i];
+        }
+    }
+    
+    var senator = senators[Math.floor(Math.random()*senators.length)];
+    actions[actions.length] = new budgetAction(senator, "Senator " + senator.name + " is trying elbow in on our budget to setup a ponies for sick kids fund.");
+    tabNotification["actions"] = true;
+}
+
+var actions = [];
 
 //
 //====== GAME LOOP ======
