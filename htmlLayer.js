@@ -31,11 +31,15 @@ canvasContext.imageSmoothingEnabled = false;
 canvasContext.webkitImageSmoothingEnabled = false;
 canvasContext.mozImageSmoothingEnabled = false;
 
+//
 //====== INPUT ======
+//
+
+var isMouseDown = false;
 canvas.addEventListener("mousedown", doMouseDown, true);
 function doMouseDown(event)
 {
-    //canvas_x = event.pageX;
+    isMouseDown = true;
 }
 
 var mouseToggledUp = false;
@@ -43,6 +47,7 @@ canvas.addEventListener("mouseup", doMouseUp, true);
 function doMouseUp(event)
 {
     mouseToggledUp = true;
+    isMouseDown = false;
 }
 
 var mousePosition = new v2(0, 0);
@@ -51,7 +56,7 @@ function doMouseMoved(event)
 {
     mousePosition.x = event.clientX - (canvas.offsetLeft - window.pageXOffset);
     mousePosition.y = event.clientY - (canvas.offsetTop - window.pageYOffset);
-    mousePosition = v2Divide(mousePosition, camera.scale)
+    mousePosition = v2Divide(mousePosition, camera.scale);
 }
 
 function getMousePosition(evt)
@@ -85,6 +90,7 @@ function ascii(character)
 //====== UPDATE ======
 //
 
+var margin = 3;
 var borderSize = 2;
 var fontHeight = 10;
 
@@ -138,29 +144,46 @@ function tableRowItem(mode, table, value)
             if(mode == "draw")
             {
                 drawText(table.panel.current, value);
-                if(fontHeight > table.maxHeightForThisRow)
-                {
-                    table.maxHeightForThisRow = fontHeight;
-                }
+            }
+            
+            if(fontHeight > table.maxHeightForThisRow)
+            {
+                table.maxHeightForThisRow = fontHeight;
             }
             break;
         case "tab":
             if(mode == "draw")
             {
                 var text = value.charAt(0).toUpperCase() + value.slice(1);
-                drawRectangle(v2Add(table.panel.current, new v2(columnData.width - borderSize, 0)), new v2(borderSize, fontHeight + (2* borderSize)), "#808080"); // right
-                if(currentTab != value)
+                
+                var dull = true;
+                var ignoreBottom = false;
+                if(currentTab == value)
                 {
-                    drawRectangle(v2Add(table.panel.current, new v2(0, fontHeight + borderSize)), new v2(columnData.width, borderSize), "#808080"); // bottom
+                    dull = false;
+                    ignoreBottom = true;
                 }
-                drawRectangle(table.panel.current, new v2(columnData.width, borderSize), "#dfdfdf"); // top
-                drawRectangle(table.panel.current, new v2(borderSize, fontHeight + (2* borderSize)), "#dfdfdf"); // left
-                drawText(v2Add(table.panel.current, new v2((2*borderSize), borderSize)), text);
+                drawOutline(table.panel.current, columnData.width - (2*borderSize), fontHeight, dull, ignoreBottom)
+                
+                var position = v2Add(table.panel.current, new v2((2*borderSize), borderSize));
+                drawText(position, text);
+                if(value in tabNotification && tabNotification[value])
+                {
+                    position.x += canvasContext.measureText(text).width;
+                    drawTexture(position, images[notifyTexture]);
+                    if(notifyTexture.height > table.maxHeightForThisRow)
+                    {
+                        table.maxHeightForThisRow = notifyTexture.height;
+                    }
+                }
             }
-            else // draw
+            else // update
             {
                 var topLeft = table.panel.current;
+                //drawCircle(topLeft);
                 var bottomRight = v2Add(table.panel.current, new v2(columnData.width, fontHeight + (2 * borderSize)));
+                // drawCircle(bottomRight);
+                // drawCircle(mousePosition);
                 result = mouseToggledUp && isBetween(topLeft, mousePosition, bottomRight);
             }
             
@@ -208,12 +231,104 @@ function endTable(panel, table)
     panel.current.y = table.panel.current.y + borderSize;
 }
 
+function doToggle(mode, panel, text, toggleMode)
+{
+    var result = false;
+    
+    var topLeft = v2Add(panel.current, new v2(margin, margin));
+    var insideWidth = canvasContext.measureText(text).width;
+    var insideHeight = fontHeight;
+    if(mode == "draw")
+    {
+        var dull = toggleMode == "down";
+        
+        drawOutline(topLeft, insideWidth, insideHeight, dull, false)
+        
+        var textColor = colorText;
+        if(toggleMode == "disabled")
+        {
+            textColor = colorDisabledText;
+        }
+        drawText(v2Add(topLeft, new v2(borderSize, borderSize)), text, textColor);
+    }
+    else // update
+    {
+        var bottomRight = v2Add(topLeft, new v2(insideWidth + (2*borderSize), fontHeight + (2* borderSize)));
+        if(mouseToggledUp && isBetween(topLeft, mousePosition, bottomRight))
+        {
+            result = true;
+        }
+    }
+    
+    panel.current.y += (2 * (margin + borderSize)) + fontHeight;
+    
+    return result;
+}
+
+// note(ian): This button doesn't update the panel because we are placing it manually.
+function doImageButton(mode, position, image)
+{
+    var result = false;
+    
+    var topLeft = v2Add(position, new v2(margin, margin));
+    var insideWidth = image.width;
+    var insideHeight = image.height;
+    if(mode == "draw")
+    {
+        var background = "none";
+        
+        drawOutline(topLeft, insideWidth, insideHeight, false, false);
+        drawTexture(v2Add(topLeft, new v2(borderSize, borderSize)), image);
+    }
+    else // update
+    {
+        var bottomRight = v2Add(topLeft, new v2(insideWidth + (2*borderSize), image.height + (2* borderSize)));
+        if(mouseToggledUp && isBetween(topLeft, mousePosition, bottomRight))
+        {
+            result = true;
+        }
+    }
+    
+    return result;
+}
+
+function drawOutline(topLeft, insideWidth, insideHeight, dull, ignoreBottom)
+{
+    var backgroundColor = colorBackground;
+    if(isMouseDown && isBetween(topLeft, mousePosition, v2Add(topLeft, new v2(insideWidth, insideHeight))))
+    {
+        backgroundColor = colorDark;
+    }
+    else if(dull)
+    {
+        backgroundColor = colorMedium;
+    }
+        
+    drawRectangle(v2Add(topLeft, new v2(borderSize, borderSize)), new v2(insideWidth, insideHeight), backgroundColor); // background
+    drawRectangle(v2Add(topLeft, new v2(insideWidth + borderSize, 0)), new v2(borderSize, insideHeight + (2* borderSize)), colorMedium); // right
+    if(!ignoreBottom)
+    {
+        drawRectangle(v2Add(topLeft, new v2(0, insideHeight + borderSize)), new v2(insideWidth + (2*borderSize), borderSize), colorMedium); // bottom
+    }
+    drawRectangle(topLeft, new v2(insideWidth + (2*borderSize), borderSize), colorLight); // top
+    drawRectangle(topLeft, new v2(borderSize, insideHeight + (2* borderSize)), colorLight); // left
+}
+
+var colorText = "#000000";
+var colorDisabledText = "#808080";
+var colorLight = "#dfdfdf";
+var colorBackground = "#c0c0c0";
+var colorDark = "#424242";
+var colorMedium = "#808080";
+
+var tabNotification = [];
+
 function updateAndDraw(mode, secondsElapsed) 
 {
     if(mode == "draw")
     {
         // Fill to black.
-        canvasContext.fillStyle = "#c0c0c0";
+        canvasContext.fillStyle = colorBackground;
         canvasContext.fillRect(0, 0, canvas.width, canvas.height);
         currentTooltip = null;
     }
@@ -221,21 +336,59 @@ function updateAndDraw(mode, secondsElapsed)
     // todo: Put in a strict width not to surpass (scrolling).
     var panel = new viewPanel(new v2(0, 0), mode);
     
+    // HEADER INFO
+    var headerTable = new table(panel.current);
+    tableColumn(headerTable, "text", 40);
+    tableColumn(headerTable, "text", 40);
+    tableColumn(headerTable, "text", 40);
+    tableColumn(headerTable, "text", 40);
+    tableColumn(headerTable, "text", 50);
+    tableColumn(headerTable, "text", 40);
+    tableColumn(headerTable, "text", 40);
+    tableColumn(headerTable, "text", 40);
+    tableColumn(headerTable, "text", 40);
+    tableColumn(headerTable, "text", 40);
+    tableStartRows(headerTable);
+    tableRowItem(mode, headerTable, "Capital");
+    tableRowItem(mode, headerTable, "$" + money + "m");
+    tableRowItem(mode, headerTable, "Budget");
+    tableRowItem(mode, headerTable, "$" + income + "m");
+    var programCost = getProgramsTotalCost();
+    tableRowItem(mode, headerTable, "Expenses");
+    tableRowItem(mode, headerTable, "-$" + programCost + "m");
+    tableRowItem(mode, headerTable, "Income");
+    tableRowItem(mode, headerTable, "$" + (income - programCost) + "m");
+    tableRowItem(mode, headerTable, "Balance");
+    tableRowItem(mode, headerTable, "$" + (money + income - programCost) + "m");
+    tableEndRow(headerTable);
+    endTable(panel, headerTable);
+    
+    // TABS
     var tabTable = new table(panel.current);
-    tableColumn(tabTable, "tab", 100);
-    tableColumn(tabTable, "tab", 100);
-    tableStartRows(tabTable);
-    if(tableRowItem(mode, tabTable, "intel"))
+    var tabs = ["messages", "intel", "actions", "programs"];
+    for(var i = 0; i < tabs.length; i++)
     {
-        currentTab = "intel";
+        tableColumn(tabTable, "tab", 100);
     }
-    if(tableRowItem(mode, tabTable, "actions"))
+    tableStartRows(tabTable);
+    for(var i = 0; i < tabs.length; i++)
     {
-        currentTab = "actions";
+        if(tabs[i] in tabNotification)
+        {
+            if(currentTab == tabs[i])
+            {
+                tabNotification[tabs[i]] = false;
+            }
+        }
+        if(tableRowItem(mode, tabTable, tabs[i]))
+        {
+            currentTab = tabs[i];
+        }
     }
     tableEndRow(tabTable);
     endTable(panel, tabTable);
     
+    // MAIN PANEL
     switch(currentTab)
     {
         case "intel":
@@ -262,6 +415,85 @@ function updateAndDraw(mode, secondsElapsed)
             }
             endTable(panel, intelTable);
         break;
+        case "messages":
+            var border = 20;
+            var width = baseWidth - (2 * border);
+            for(var i = breifings.length - 1; i >= 0; i--)
+            {
+                var text = wordWrap(breifings[i], width);
+                for(var j = 0; j < text.length; j++)
+                {
+                    drawText(v2Add(panel.current, new v2(border, 0)), text[j]);
+                    panel.current.y += fontHeight;
+                }
+                
+                if(i > 0)
+                {
+                    drawRectangle(v2Add(panel.current, new v2(margin, margin)), new v2(baseWidth -(2*margin), borderSize), colorMedium);
+                    panel.current.y += fontHeight;
+                }
+            }
+        break;
+        case "programs":
+            for(var i = 0; i < programs.length; i++)
+            {
+                var program = programs[i];
+                var canAfford = program.cost <= income + money - getProgramsTotalCost();
+                var buttonMode = "down";
+                if(!program.active)
+                {
+                    if(canAfford)
+                    {
+                        buttonMode = "up";
+                    }
+                    else
+                    {
+                        buttonMode = "disabled";
+                    }
+                }
+                if(doToggle(mode, panel, program.name + " $" + program.cost + "m", buttonMode))
+                {
+                    if(program.active)
+                    {
+                        program.active = false;
+                    }
+                    else if(canAfford)
+                    {
+                        program.active = true;
+                    }
+                }
+            }
+        break;
+    }
+    
+    // todo: Put a tool tip on this
+    var endTurnButtonPosition = new v2(baseWidth - 30, baseHeight - 30);
+    if(doImageButton(mode, endTurnButtonPosition, images[endTurnTextureName]))
+    {
+        // var programCost = getProgramsTotalCost();
+        // money += income - programCost;
+        // var projection = money + income - programCost;
+        // if(projection
+        money += income;
+        for(var i = 0; i < programs.length; i++)
+        {
+            var program = programs[i];
+            if(program.active)
+            {
+                if(program.cost <= money)
+                {
+                    money -= program.cost;
+                    program.activeLastTurn = true;
+                }
+                else
+                {
+                    program.active = false;
+                    addBreifing("The " + program.name + " program was shut down due to lack of funds.");
+                }
+            }
+            
+            program.activeLastTurn = program.active;
+        }
     }
     
     if(mode == "draw" && currentTooltip != null)
@@ -270,11 +502,53 @@ function updateAndDraw(mode, secondsElapsed)
         drawText(v2Add(currentTooltip.position, new v2(7, 0)), currentTooltip.text);
     }
     
-    if(keysDown[ascii("D")])
-    {
-    }
+    // if(keysDown[ascii("D")])
+    // {
+    // }
     
     mouseToggledUp = false;
+}
+
+function wordWrap(text, width)
+{
+    var result = [];
+    var lines = text.split('\n');
+    for(var i = 0; i < lines.length; i++)
+    {
+        var textWidth = canvasContext.measureText(lines[i]).width;
+        if(textWidth <= width)
+        {
+            result[result.length] = lines[i];
+        }
+        else
+        {
+            var currentText = "";
+            var currentTextWidth = 0;
+            var words = lines[i].split(" ");
+            for(var j = 0; j < words.length; j++)
+            {
+                var part = words[j];
+                var nextPeiceWidth = canvasContext.measureText(" " + part).width;
+                if(currentTextWidth + nextPeiceWidth > width)
+                {
+                    result[result.length] = currentText;
+                    currentText = "";
+                    currentTextWidth = 0;
+                }
+                if(currentText != "")
+                {
+                    currentText += " ";
+                }
+                currentText += part;
+                currentTextWidth += nextPeiceWidth;
+            }
+            if(currentText != "")
+            {
+                result[result.length] = currentText;
+            }
+        }
+    }
+    return result;
 }
 
 function approach(start, destination, rate)
@@ -293,27 +567,6 @@ function approach(start, destination, rate)
 //====== DRAW ======
 //
 
-// function draw()
-// {
-    // // Fill to black.
-    // canvasContext.fillStyle = "#000000";
-    // canvasContext.fillRect(0, 0, canvas.width, canvas.height);
-
-    // // drawRectangle(new v2(10, 10), new v2(10, 10));
-    // // drawCircle(new v2(10, 10));
-    
-    // // drawText(new v2(0, 0), "TOP LEFT");
-    // // drawText(new v2(baseWidth/2, 0), "TOP CENTER");
-    // // drawText(new v2(baseWidth, baseHeight), "BOTTOM RIGHT");
-    // // drawText(new v2(baseWidth/2, baseHeight), "BOTTOM CENTER");
-    // // drawText(new v2(0, baseHeight/2), "CENTER LEFT");
-    // // drawCircle(new v2(0, baseHeight/2));
-    // // drawCircle(new v2(0, baseHeight/2 + 12));
-    // // drawText(new v2(baseWidth, baseHeight/2), "CENTER RIGHT");
-    
-    // // drawTexture(images[buttonTextureName], new v2(10, 10));
-// }
-
 function drawRectangle(start, size, color)
 {
     var position = v2Subtract(v2Multiply(start, camera.scale), camera.offset);
@@ -331,10 +584,11 @@ function drawCircle(center)
     canvasContext.fill();
 }
 
-function drawText(start, text)
+function drawText(start, text, color)
 {
+    color = color || colorText;
     canvasContext.font = fontHeight + "px Arial";
-    canvasContext.fillStyle = "#000000";
+    canvasContext.fillStyle = color;
     //var textSize = canvasContext.measureText(text);
     var position = new v2(start.x, start.y);
     position.y += fontHeight;
@@ -378,22 +632,15 @@ function addImage(fileName)
 }
 var buttonTextureName = "data/button.png";
 addImage(buttonTextureName);
+var endTurnTextureName = "data/endTurn.png";
+addImage(endTurnTextureName);
+var notifyTexture = "data/notify.png";
+addImage(notifyTexture);
 
 var camera = new Object();
 camera.scale = startScale;
 camera.target = null;
 camera.offset = new v2(0, 0);//new v2(canvas.width/2, canvas.height/2);
-
-function intel(name, job, legalScoop, illegalScoop, loyalty, fear, suspicion)
-{
-    this.name = name;
-    this.job = job;
-    this.legalScoop = legalScoop;
-    this.illegalScoop = illegalScoop;
-    this.loyalty = loyalty;
-    this.fear = fear;
-    this.suspicion = suspicion;
-}
 
 var imageSet = [];
 imageSet["job"] = [];
@@ -407,10 +654,59 @@ imageSet["job"]["macroCorp"] = new Image();
 imageSet["job"]["macroCorp"].src = "data/jobMacroCorp.png";
 imageSet["job"]["macroCorp"].tooltip = "MacroCorp";
 
+function intel(name, job, legalScoop, illegalScoop, loyalty, fear, suspicion)
+{
+    this.name = name;
+    this.job = job;
+    this.legalScoop = legalScoop;
+    this.illegalScoop = illegalScoop;
+    this.loyalty = loyalty;
+    this.fear = fear;
+    this.suspicion = suspicion;
+}
+
 var intelList = [];
 intelList[intelList.length] = new intel("Bob Nator", "president", 0, 0, 0.5, 0, 0);
 intelList[intelList.length] = new intel("John Johnson", "journalist", 0, 0, 0.1, 0, 0.1);
 intelList[intelList.length] = new intel("Natalie Hammer", "macroCorp", 0, 0, 0.2, 0, 0.1);
+
+function program(name, cost)
+{
+    this.name = name;
+    this.cost = cost;
+    this.active = false;
+    this.activeLastTurn = false;
+}
+
+var programs = [];
+programs[programs.length] = new program("Tap Land Lines", 100);
+programs[programs.length] = new program("Email Capture", 100);
+programs[programs.length] = new program("Snoop Cell Phones", 100);
+
+var breifings = [];
+function addBreifing(text)
+{    
+    breifings[breifings.length] = text;
+    tabNotification["messages"] = true;
+}
+addBreifing("Congratulations on your premotion to director of the NSA.  We have suspicions of a plot to blow up the White House, but we don't have any more leads, if only we could tap the land lines we might be able to figure out more.\n\nGood Luck,\nBob Robertson\nDirector of CIA");
+
+var income = 100;
+var money = 100;
+
+// todo: cancel programs we can't afford
+function getProgramsTotalCost()
+{
+    var cost = 0;
+    for(var i = 0; i < programs.length; i++)
+    {
+        if(programs[i].active)
+        {
+            cost += programs[i].cost;
+        }
+    }
+    return cost;
+}
 
 // var testSound = new Audio("data/audio/sound1.wav");
 // testSound.play();
@@ -419,7 +715,7 @@ intelList[intelList.length] = new intel("Natalie Hammer", "macroCorp", 0, 0, 0.2
 //====== GAME LOOP ======
 //
 
-var currentTab = "intel";
+var currentTab = "messages";
 var lastUpdateTime;
 function main()
 {
@@ -461,6 +757,11 @@ function v2(x, y)
     }
     this.x = x;
     this.y = y;
+}
+
+function v2Copy(a)
+{
+    return new v2(a.x, a.y);
 }
 
 function v2Multiply(one, scalar)
